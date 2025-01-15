@@ -492,7 +492,7 @@ if __name__ == '__main__':
             cv2.imshow("Blue Mask", blue_mask)
             cv2.imshow("Dilated Blue Mask", blue_mask_dilated)
 
-            app.run(port=1000, debug=True)
+            app.run(port=5111, debug=True)
 
             if (cv2.waitKey(1) & 0xFF == ord('q')) or (cv2.waitKey(1) & 0xFF == ord('Q')):
                 print("Exiting display loop.")
