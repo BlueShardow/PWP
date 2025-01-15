@@ -1,3 +1,4 @@
+from asyncio import subprocess
 import os
 import logging
 from flask import Flask, jsonify, request, render_template, send_file, flash, redirect, url_for, Response
@@ -6,6 +7,8 @@ import math
 import numpy as np
 from werkzeug.security import check_password_hash, generate_password_hash
 import pickle
+import signal
+import atexit
 
 # =======================================================================
 # Overlay-related helper functions (copied from your given overlay code)
@@ -259,7 +262,6 @@ def detect_and_classify_lines(frame, max_line_gap=85, toward_tolerance=65, away_
     draw_center_line_for_parallel_pairs(frame, parallel_blue_lines)
     return frame, blue_mask, blue_mask_dilated
 
-
 # Flask setup
 app = Flask(__name__)
 
@@ -438,20 +440,21 @@ def logs(filename):
 
 @app.route('/move', methods=['POST'])
 def move():
-    """Handle robot movement commands."""
     content = request.json
     command = content.get('command')
-    
+
     if command:
         if command == 'stop':
             string_command = r"~/bcm2835-1.70/Motor_Driver_HAT_Code/Motor_Driver_HAT_Code/Raspberry\ Pi/c/main stop"
             os.system(string_command)
+
         else:
             string_command = r"~/bcm2835-1.70/Motor_Driver_HAT_Code/Motor_Driver_HAT_Code/Raspberry\ Pi/c/main " + str(command)
             subprocess.run([string_command], shell=True)
-        
         logging.info(f"Received command: {command}")
+
         return jsonify({'success': True, 'command': command}), 200
+
     else:
         return jsonify({'error': 'Invalid command'}), 400
 
@@ -460,8 +463,11 @@ def move():
 def cleanup_resources():
     if camera.isOpened():
         camera.release()
+        cv2.destroyAllWindows()
         logging.info("Camera resources released.")
         logging.info("Application shutdown gracefully.")
+
+    cv2.destroyAllWindows()
 
 
 # Register cleanup with atexit and signal handlers
@@ -485,10 +491,10 @@ if __name__ == '__main__':
             # Display the masks
             cv2.imshow("Blue Mask", blue_mask)
             cv2.imshow("Dilated Blue Mask", blue_mask_dilated)
-            
-            # Wait for a short period to update display
-            # Break the loop if 'q' is pressed
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+
+            app.run(port=1000, debug=True)
+
+            if (cv2.waitKey(1) & 0xFF == ord('q')) or (cv2.waitKey(1) & 0xFF == ord('Q')):
                 print("Exiting display loop.")
                 break
         
@@ -500,3 +506,9 @@ if __name__ == '__main__':
         print("\nKeyboardInterrupt received. Shutting down...")
         cleanup_resources()
         cv2.destroyAllWindows()
+
+    cleanup_resources()
+    cv2.destroyAllWindows()
+
+cleanup_resources()
+cv2.destroyAllWindows()
