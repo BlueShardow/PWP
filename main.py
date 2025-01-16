@@ -34,6 +34,8 @@ def is_parallel(line1, line2, toward_tolerance, away_tolerance, distance_thresho
     angle2 = calculate_angle(line2)
 
     angle_diff = abs(angle1 - angle2)
+    angle_diff = min(angle_diff, 180 - angle_diff)
+
     if angle_diff > toward_tolerance and (180 - angle_diff) > away_tolerance:
         return False
 
@@ -138,48 +140,29 @@ def draw_center_line_for_parallel_pairs(frame, parallel_lines):
                 break
 
     for lineA, lineB in pairs:
-        x1A, y1A, x2A, y2A = lineA
-        x1B, y1B, x2B, y2B = lineB
+        p1 = np.array((lineA[0], lineA[1], 1))
+        p2 = np.array((lineA[2], lineA[3], 1))
+        q1 = np.array((lineB[0], lineB[1], 1))
+        q2 = np.array((lineB[2], lineB[3], 1))
+        if p1[1] > p2[1]:
+            p2, p1 = p1, p2
+        if q1[1] > q2[1]:
+            q2, q1 = q1, q2
+        midpoints = [0, 0]
+        for i, y in enumerate([0, 1000]):
+            m1 = np.cross(np.cross(p1, p2), np.array([0, 1, y]))
+            m2 = np.cross(np.cross(q1, q2), np.array([0, 1, y]))
+            midpoints[i] = (m1 / m1[2]) + (m2 / m2[2])
+        e1 = np.cross(np.cross(midpoints[0], midpoints[1]), np.cross(p1, q1))
+        e2 = np.cross(np.cross(midpoints[0], midpoints[1]), np.cross(p2, q2))
+        e1 /= e1[2]
+        e2 /= e2[2]
 
-        # Horizontal
-        if abs(y1A - y2A) < abs(x1A - x2A) and abs(y1B - y2B) < abs(x1B - x2B):
-            center_y = int((y1A + y2A + y1B + y2B) / 4)
-            min_x = max(min(x1A, x2A), min(x1B, x2B))
-            max_x = min(max(x1A, x2A), max(x1B, x2B))
-            if max_x > min_x:
-                cv2.line(frame, (min_x, center_y), (max_x, center_y), (255, 0, 0), 3)
+        try:
+            cv2.line(frame, (int(e1[0]), int(e1[1])), (int(e2[0]), int(e2[1])), (255, 0, 0), 3)
 
-        # Vertical
-        elif abs(x1A - x2A) < abs(y1A - y2A) and abs(x1B - x2B) < abs(y1B - y2B):
-            center_x = int((x1A + x2A + x1B + x2B) / 4)
-            min_y = max(min(y1A, y2A), min(y1B, y2B))
-            max_y = min(max(y1A, y2A), max(y1B, y2B))
-            if max_y > min_y:
-                cv2.line(frame, (center_x, min_y), (center_x, max_y), (255, 0, 0), 3)
-        else:
-            # Diagonal or other
-            common_min_y = max(min(y1A, y2A), min(y1B, y2B))
-            common_max_y = min(max(y1A, y2A), max(y1B, y2B))
-            if common_max_y <= common_min_y:
-                continue
-
-            top_y = int(common_min_y)
-            bottom_y = int(common_max_y)
-            top_xA = line_intersection_at_y(lineA, top_y)
-            top_xB = line_intersection_at_y(lineB, top_y)
-            bottom_xA = line_intersection_at_y(lineA, bottom_y)
-            bottom_xB = line_intersection_at_y(lineB, bottom_y)
-
-            if top_xA > top_xB:
-                top_xA, top_xB = top_xB, top_xA
-            if bottom_xA > bottom_xB:
-                bottom_xA, bottom_xB = bottom_xB, bottom_xA
-
-            min_top_x = max(top_xA, top_xB)
-            max_bottom_x = min(bottom_xA, bottom_xB)
-
-            if min_top_x < max_bottom_x:
-                cv2.line(frame, (int(min_top_x), top_y), (int(max_bottom_x), bottom_y), (255, 0, 0), 3)
+        except:
+            pass
 
 def detect_and_classify_lines(frame, max_line_gap=85, toward_tolerance=65, away_tolerance=45, merge_angle_tolerance=65,
                               distance_threshold=999999999, min_distance=250, min_line_length=195, min_overlap_ratio=0.8,
@@ -483,6 +466,10 @@ if __name__ == '__main__':
             success, frame = camera.read()
             if not success:
                 print("Failed to capture frame from camera.")
+                break
+
+            if (cv2.waitKey(1) & 0xFF == ord('q')) or (cv2.waitKey(1) & 0xFF == ord('Q')):
+                print("Exiting display loop.")
                 break
             
             # Process the frame to generate blue masks
