@@ -274,6 +274,11 @@ def sort_line_endpoints(line):
         return x1, y1, x2, y2
 
 def draw_midline_lines(warped_frame, blended_lines, width):
+    mid_line = []
+
+    if len(blended_lines) < 2:
+        return warped_frame, mid_line
+
     if not isinstance(blended_lines, list):
         print(f"Error: blended_lines should be a list, but got {type(blended_lines)}")
         return
@@ -314,13 +319,60 @@ def draw_midline_lines(warped_frame, blended_lines, width):
                         sorted_x1, sorted_y1, sorted_x2, sorted_y2 = sort_line_endpoints((x_mid1, y_mid1, x_mid2, y_mid2))
 
                         cv.line(warped_frame, (sorted_x1, sorted_y1), (sorted_x2, sorted_y2), (255, 0, 0), 2)
+
+                        mid_line.append(sorted_x1, sorted_y1, sorted_x2, sorted_y2)
                     
                 else:
                     print(f"Skipping invalid line indices: {line1}, {line2}")
             else:
                 print(f"Skipping invalid line format: {line1} (Type: {type(line1)}), {line2} (Type: {type(line2)})")
 
-    return warped_frame
+    return warped_frame, mid_line
+
+# Above is lane dection, below is logic for how to move ____________________________________________________________________________________________________________________________
+
+def determine_direction(lines, width):
+    """
+    0 = stop
+    1 = left
+    2 = straight
+    3 = right
+
+    if its smth like 012 then that means left, then straight, then right
+    """
+    
+    if len(lines) >= 2:
+        lines = merge_lines(lines, width)
+
+    if len(lines) >= 2:
+        print("stop")
+        return 0
+
+    else:
+        x1, y1, x2, y2 = lines[0]
+
+        if x1 < (width // 2) - 20 and x2 < (width // 2) - 20: # left
+            print("Left")
+            return 1
+        
+        elif x1 > (width // 2) + 20 and x2 > (width // 2) + 20: # right
+            print("Right")
+            return 3
+        
+        elif (x1 > (width // 2) - 20 and x1 < (width // 2) + 20) and (x2 > (width // 2) - 20 and x2 < (width // 2) + 20): # straight
+            print("Straight")
+            return 2
+        
+        elif x1 < (width // 2) - 20 and x2 > (width // 2) + 20:
+            print("Left, Straight, Right")
+            return 123
+        
+        elif x1 > (width // 2) + 20 and x2 < (width // 2) - 20:
+            print("Right, Straight, Left")
+            return 321
+        
+
+
 
 def display_fps(frame, start_time):
     end_time = time.time()
@@ -332,19 +384,20 @@ def display_fps(frame, start_time):
 def main(): #_____________________________________________________________________________________________________________________________________________________________________________
     cap = cv.VideoCapture(0)
 
-    merged_lines = []
-    frame_skip = 3
+    frame_skip = 0
     frame_by_frame_mode = False
 
     if not cap.isOpened():
         print("Error: Could not open video file.")
         return
 
-    frame_count = 0
+    frame_count = 3
 
     while True:
         start_time = time.time()
         ret, frame = cap.read()
+
+        merged_lines = []
 
         if not ret:
             print("Error: Could not read frame.")
@@ -352,20 +405,20 @@ def main(): #___________________________________________________________________
 
         frame_count += 1
 
+        """
         if frame_count % frame_skip != 0:
             continue
+        """
 
         frame, height, width, ratio = resize_frame(frame)
         preprocessed_frame = process_frame(frame)
-
-        display_fps(frame, start_time)
 
         #"""
         roi_points = [
             (0, height),  # bottom left
             (width, height),  # bottom right
-            (width, 100),  # top right
-            (0, 100)  # top left
+            (width - 20, 100),  # top right
+            (20, 100)  # top left
         ]
         #"""
 
@@ -390,7 +443,7 @@ def main(): #___________________________________________________________________
                 x1, y1, x2, y2 = line
                 cv.line(merge_line_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-            draw_midline_lines(merge_line_frame, merged_lines, warped_width)
+            _, mid_lines = draw_midline_lines(merge_line_frame, merged_lines, warped_width)
 
         if lines is not None:
             for line in lines:
@@ -398,6 +451,8 @@ def main(): #___________________________________________________________________
                 cv.line(line_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
             #print("Lines:", len(lines))
+
+        display_fps(frame, start_time)
 
         cv.imshow("Frame", frame)
         cv.imshow("Preprocessed Frame", preprocessed_frame)
