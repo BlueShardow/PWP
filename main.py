@@ -15,7 +15,7 @@ def resize_frame(frame):
 def process_frame(frame):
     frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
 
-    alpha = 1.2
+    alpha = 1.25
     beta = 0
     frame = cv.convertScaleAbs(frame, alpha=alpha, beta=beta)
 
@@ -41,8 +41,8 @@ def get_perspective_transform(frame, roi_points, width, height):
 def sobel_edges(frame):
     gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY) if len(frame.shape) == 3 else frame
 
-    sobel_x = cv.Sobel(gray, cv.CV_64F, 1, 0, ksize = 5)
-    sobel_y = cv.Sobel(gray, cv.CV_64F, 0, 1, ksize = 5)
+    sobel_x = cv.Sobel(gray, cv.CV_64F, 1, 0, ksize = 7)
+    sobel_y = cv.Sobel(gray, cv.CV_64F, 0, 1, ksize = 7)
 
     edges = cv.magnitude(sobel_x, sobel_y)
     edges = cv.normalize(edges, None, 0, 255, cv.NORM_MINMAX).astype(np.uint8)
@@ -57,7 +57,7 @@ def sobel_edges(frame):
 
     binary_edges_bgr = cv.cvtColor(binary_edges, cv.COLOR_GRAY2BGR)
 
-    lines = cv.HoughLinesP(binary_edges, rho = 1, theta = np.pi / 180, threshold = 100, minLineLength = 100, maxLineGap = 150)
+    lines = cv.HoughLinesP(binary_edges, rho = 1, theta = np.pi / 180, threshold = 100, minLineLength = 25, maxLineGap = 150)
     line_frame = frame.copy()
 
     if lines is not None:
@@ -131,21 +131,21 @@ def is_parallel_lines(line1, line2, toward_tolerance, away_tolerance, distance_t
 def merge_lines(lines, width, height = 150, min_distance = 85, merge_angle_tolerance = 20, vertical_leeway = 1.3, horizontal_leeway = 1.1):
     def weighted_average(p1, w1, p2, w2):
         # Apply exponential scaling to weights based on their lengths
-        if w1 < w2 / 3:
+        if w1 < w2 / 3 + 5:
             return p2
         
-        elif w2 < w1 / 3:
+        elif w2 < w1 / 3 + 5:
             return p1 
         
-        elif w1 < w2 / 2:
+        elif w1 < w2 / 2 + 5:
             return (p1 + p2 * 5) / (1 + 5)
         
-        elif w2 < w1 / 2:
+        elif w2 < w1 / 2 + 5:
             return (p2 + p1 * 5) / (1 + 5)
         
         else:
-            scaled_w1 = w1 ** 1.1
-            scaled_w2 = w2 ** 1.1
+            scaled_w1 = w1 ** 1.2
+            scaled_w2 = w2 ** 1.2
 
             return (p1 * scaled_w1 + p2 * scaled_w2) / (scaled_w1 + scaled_w2)
 
