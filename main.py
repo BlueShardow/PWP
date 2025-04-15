@@ -7,13 +7,18 @@ import time
 def resize_frame(frame):
     height, width = frame.shape[:2]
     aspect_ratio = width / height
-    new_height = 300
+    new_height = 200
     new_width = int(new_height * aspect_ratio)
 
     return cv.resize(frame, (new_width, new_height)), new_height, new_width, aspect_ratio
 
 def process_frame(frame):
     frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+
+    alpha = 1.2
+    beta = 0
+    frame = cv.convertScaleAbs(frame, alpha=alpha, beta=beta)
+
     frame = cv.medianBlur(frame, 5)
     frame = cv.bilateralFilter(frame, 9, 75, 75)
 
@@ -36,14 +41,14 @@ def get_perspective_transform(frame, roi_points, width, height):
 def sobel_edges(frame):
     gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY) if len(frame.shape) == 3 else frame
 
-    sobel_x = cv.Sobel(gray, cv.CV_64F, 1, 0, ksize=5)
-    sobel_y = cv.Sobel(gray, cv.CV_64F, 0, 1, ksize=5)
+    sobel_x = cv.Sobel(gray, cv.CV_64F, 1, 0, ksize = 5)
+    sobel_y = cv.Sobel(gray, cv.CV_64F, 0, 1, ksize = 5)
 
     edges = cv.magnitude(sobel_x, sobel_y)
     edges = cv.normalize(edges, None, 0, 255, cv.NORM_MINMAX).astype(np.uint8)
 
     _, binary_edges = cv.threshold(edges, 50, 255, cv.THRESH_BINARY)
-    binary_edges = cv.dilate(binary_edges, None, iterations = 1) # do this multiple times, and next function
+    binary_edges = cv.dilate(binary_edges, None, iterations = 1) 
     binary_edges = cv.erode(binary_edges, None, iterations = 1)
     binary_edges = cv.medianBlur(binary_edges, 5)
     binary_edges = cv.bilateralFilter(binary_edges, 9, 75, 75)
@@ -123,12 +128,26 @@ def is_parallel_lines(line1, line2, toward_tolerance, away_tolerance, distance_t
 
     return False
 
-def merge_lines(lines, width, height = 200, min_distance = 85, merge_angle_tolerance = 20, vertical_leeway = 1.3, horizontal_leeway = 1.1):
+def merge_lines(lines, width, height = 150, min_distance = 85, merge_angle_tolerance = 20, vertical_leeway = 1.3, horizontal_leeway = 1.1):
     def weighted_average(p1, w1, p2, w2):
         # Apply exponential scaling to weights based on their lengths
-        scaled_w1 = w1 ** 1.1
-        scaled_w2 = w2 ** 1.1
-        return (p1 * scaled_w1 + p2 * scaled_w2) / (scaled_w1 + scaled_w2)
+        if w1 < w2 / 3:
+            return p2
+        
+        elif w2 < w1 / 3:
+            return p1 
+        
+        elif w1 < w2 / 2:
+            return (p1 + p2 * 5) / (1 + 5)
+        
+        elif w2 < w1 / 2:
+            return (p2 + p1 * 5) / (1 + 5)
+        
+        else:
+            scaled_w1 = w1 ** 1.1
+            scaled_w2 = w2 ** 1.1
+
+            return (p1 * scaled_w1 + p2 * scaled_w2) / (scaled_w1 + scaled_w2)
 
     def sort_line_endpoints(line):
         x1, y1, x2, y2 = line
@@ -331,6 +350,35 @@ def draw_midline_lines(warped_frame, blended_lines, width):
 
 # Above is lane dection, below is logic for how to move ____________________________________________________________________________________________________________________________
 
+def is_on_path(lines, center_lines, width):
+    valids = 0
+    out_of = len(lines) + len(center_lines)
+
+    for line in lines:
+        x1, y1, x2, y2 = line
+        
+        if (x1 < (width // 2) - 20 and x2 < (width // 2) - 20) or (x1 > (width // 2) + 20 and x2 > (width // 2) + 20):
+            valids += 1
+
+        if (x1 < (width // 2) - 20 and x2 < (width // 2) - 20) and (x1 > (width // 2) + 20 and x2 > (width // 2) + 20):
+            valids += 1
+
+    for center_line in center_lines:
+        x1, y1, x2, y2 = center_line
+
+        if (x1 > (width // 2) - 20 and x2 > (width // 2) - 20) and (x1 < (width // 2) + 20 and x2 < (width // 2) + 20):
+            valids += 1
+
+    print("Valid Lines:", valids, "Out of:", out_of)
+    if valids >= out_of - 1:
+        return True
+    
+    else:
+        return False
+    
+def off_path(lines, center_lines, width): # to work on
+    pass
+
 def determine_direction(lines, width):
     """
     0 = stop
@@ -341,6 +389,10 @@ def determine_direction(lines, width):
     if its smth like 012 then that means left, then straight, then right
     """
     
+    if len(lines) == 0:
+        print("stop")
+        return 0
+
     if len(lines) >= 2:
         lines = merge_lines(lines, width)
 
@@ -370,6 +422,7 @@ def determine_direction(lines, width):
         elif x1 > (width // 2) + 20 and x2 < (width // 2) - 20:
             print("Right, Straight, Left")
             return 321
+
         
 
 
@@ -382,7 +435,7 @@ def display_fps(frame, start_time):
     return frame
 
 def main(): #_____________________________________________________________________________________________________________________________________________________________________________
-    cap = cv.VideoCapture(0)
+    cap = cv.VideoCapture(0) # change for source of vid, 0 for built in webcam if on mac or laptop, 1 for attached, 0 for the pi, if error on one, try the other
 
     frame_skip = 0
     frame_by_frame_mode = False
@@ -413,14 +466,22 @@ def main(): #___________________________________________________________________
         frame, height, width, ratio = resize_frame(frame)
         preprocessed_frame = process_frame(frame)
 
-        #"""
+        
         roi_points = [
             (0, height),  # bottom left
             (width, height),  # bottom right
-            (width - 20, 100),  # top right
-            (20, 100)  # top left
+            (width - 10, 50),  # top right
+            (10, 50)  # top left
         ]
-        #"""
+        
+        """
+        roi_points = [
+            (0, height),  # bottom left
+            (width, height),  # bottom right
+            (width, 0),  # top right
+            (0, 0)  # top left
+        ]
+        """
 
         mask = np.zeros_like(preprocessed_frame)
         roi_corners = np.array(roi_points, dtype=np.int32)
@@ -431,6 +492,7 @@ def main(): #___________________________________________________________________
         cv.polylines(frame, [roi_points_np], True, (0, 255, 0), 2)
 
         warped_frame = get_perspective_transform(preprocessed_frame, roi_points, width, height)
+    
         contour_frame, binary_frame, line_frame, lines = sobel_edges(warped_frame)
 
         warped_width = warped_frame.shape[1]
@@ -456,7 +518,7 @@ def main(): #___________________________________________________________________
 
         cv.imshow("Frame", frame)
         cv.imshow("Preprocessed Frame", preprocessed_frame)
-        cv.imshow("ROI Frame", roi_frame)
+        #cv.imshow("ROI Frame", roi_frame)
         cv.imshow("Warped Frame", warped_frame)
         cv.imshow("Binary Frame", binary_frame)
         #cv.imshow("Contour Frame", contour_frame)
