@@ -379,6 +379,52 @@ def is_on_path(lines, center_lines, width):
 def off_path(lines, center_lines, width): # to work on
     pass
 
+def detect_turn(lines, center_lines, width):
+    if len(lines) == 0:
+        return 0
+
+    if len(center_lines) >= 2:
+        lines = merge_lines(lines, width)
+
+    if len(center_lines) >= 2:
+        return 0
+
+    if_turn_many = 0
+
+    for line in lines:
+        x1, y1, x2, y2 = line
+        slope = (y2 - y1) / (x2 - x1)
+        if_turn = 0
+
+        if slope < 0:
+            slope += 180
+
+        if slope > 180:
+            slope -= 180
+    
+        if slope < 10 or slope > 170:
+            if_turn += 1
+
+        if (slope < 10 or slope > 170) and (y1 < 50 or y2 < 50):
+            if_turn += 2
+
+        if (slope < 10 or slope > 170) and (y1 < 50 and y2 < 50):
+            if_turn += 3
+
+        if if_turn >= 6:
+            if_turn_many += 2
+
+        elif if_turn >= 3:
+            if_turn_many += 1
+
+    if if_turn_many >= 2:
+        print("Turn")
+        return 1
+        
+    
+            
+
+
 def determine_direction(lines, width):
     """
     0 = stop
@@ -513,6 +559,9 @@ def main(): #___________________________________________________________________
                 cv.line(line_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
             #print("Lines:", len(lines))
+
+        if line is not None:
+            detect_turn(merged_lines, mid_lines, warped_width)
 
         display_fps(frame, start_time)
 
