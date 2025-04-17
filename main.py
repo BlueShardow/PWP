@@ -393,7 +393,12 @@ def detect_turn(lines, center_lines, width):
 
     for line in lines:
         x1, y1, x2, y2 = line
-        slope = (y2 - y1) / (x2 - x1)
+        try:
+            slope = (y2 - y1) / (x2 - x1)
+
+        except ZeroDivisionError:
+            slope = 90
+            
         if_turn = 0
 
         if slope < 0:
@@ -481,7 +486,7 @@ def display_fps(frame, start_time):
     return frame
 
 def main(): #_____________________________________________________________________________________________________________________________________________________________________________
-    cap = cv.VideoCapture(0) # change for source of vid, 0 for built in webcam if on mac or laptop, 1 for attached, 0 for the pi, if error on one, try the other
+    cap = cv.VideoCapture(1) # change for source of vid, 0 for built in webcam if on mac or laptop, 1 for attached, 0 for the pi, if error on one, try the other
 
     frame_skip = 0
     frame_by_frame_mode = False
@@ -497,6 +502,7 @@ def main(): #___________________________________________________________________
         ret, frame = cap.read()
 
         merged_lines = []
+        mid_lines = []
 
         if not ret:
             print("Error: Could not read frame.")
@@ -560,7 +566,7 @@ def main(): #___________________________________________________________________
 
             #print("Lines:", len(lines))
 
-        if line is not None:
+        if merged_lines is not None and mid_lines is not None:
             detect_turn(merged_lines, mid_lines, warped_width)
 
         display_fps(frame, start_time)
